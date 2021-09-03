@@ -1,0 +1,22 @@
+{
+    "name": "61qt/spdb-pay",
+    "description": "浦发银行支工具类",
+    "type": "library",
+    "require": {
+        "php": ">=7.0",
+        "guzzlehttp/guzzle": ">=6.2"
+    },
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "kars",
+            "email": "kangxian.ye@gdzhsng.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "QT\\SpdbBank\\": "src/"
+        }
+    },
+    "minimum-stability": "dev"
+}
