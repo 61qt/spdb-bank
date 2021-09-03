@@ -6,6 +6,6 @@ class Payment
 {
     public function pay()
     {
-        
+        echo 1;
     }
 }
