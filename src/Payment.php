@@ -18,35 +18,29 @@ class Payment
     private $publicKey;
     private $debug;
 
+    private $requireConfigs = [
+        'subMechNoAcctID' => '子商户公众账号ID不能为空',
+        'spdbMrchNo'      => '特约商户号不能为空',
+        'terminalNo'      => '终端号',
+        'secret'          => '秘钥不能为空',
+        'mrchlInfmAdr'    => 'notify_url不能为空',
+        'privateKey'      => '私钥不能为空',
+        'publicKey'       => '公钥不能为空',
+        'clientId'        => 'ClientID不能为空',
+    ];
+
     public function __construct(array $config, bool $debug = false)
     {
-        if (empty($config['subMechNoAcctID'])) {
-            throw new Exception('子商户公众账号ID不能为空');
-        }
-
-        if (empty($config['spdbMrchNo'])) {
-            throw new Exception('特约商户号不能为空');
-        }
-
-        if (empty($config['secret'])) {
-            throw new Exception('秘钥不能为空');
-        }
-
-        if (empty($config['mrchlInfmAdr'])) {
-            throw new Exception('notify_url不能为空');
-        }
-
-        if (empty($config['privateKey'])) {
-            throw new Exception('私钥不能为空');
-        }
-
-        if (empty($config['publicKey'])) {
-            throw new Exception('公钥不能为空');
+        foreach ($this->requireConfigs as $k => $v) {
+            if (empty($config[$k])) {
+                throw new Exception($v);
+            }
         }
 
         $this->params['subMechNoAcctID'] = $config['subMechNoAcctID'];
         $this->params['spdbMrchNo']      = $config['spdbMrchNo'];
         $this->params['mrchlInfmAdr']    = $config['mrchlInfmAdr'];
+        $this->params['terminalNo']      = $config['terminalNo'];
 
         $this->secret     = $config['secret'];
         $this->clientId   = $config['clientId'];
@@ -69,6 +63,7 @@ class Payment
         $Client   = new Client([
             'timeout' => self::HTTP_TIMEOUT,
         ]);
+
         $Response = $Client->request('POST', self::GATEWAY . $path, [
             'headers' => [
                 'X-SPDB-Client-ID'  => $this->clientId,
@@ -76,7 +71,7 @@ class Payment
                 'X-SPDB-Encryption' => 'true',
                 'Content-Type'      => 'application/json'
             ],
-            'body'    => $this->encrypt($json, $this->secret)
+            'body'    => $this->encrypt($json, $this->secret),
         ]);
 
         $result = $Response->getBody()->getContents();
