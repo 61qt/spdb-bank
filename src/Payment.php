@@ -89,7 +89,6 @@ class Payment
     {
         $key = openssl_get_privatekey($private_key);
         openssl_sign($data, $sign, $key, OPENSSL_ALGO_SHA1);
-        openssl_free_key($key);
         $sign = base64_encode($sign);
 
         return $sign;
@@ -103,7 +102,6 @@ class Payment
         $signTemp = base64_decode($sign);
         $key      = openssl_pkey_get_public($publicKey);
         $result   = openssl_verify($data, $signTemp, $key, OPENSSL_ALGO_SHA1);
-        openssl_free_key($key);
 
         return $result === 1;
     }
@@ -134,45 +132,5 @@ class Payment
         $iv              = substr($secretTemp, $ivSize);
 
         return openssl_decrypt($encryptDataTemp, "AES-128-CBC", $key, OPENSSL_RAW_DATA, $iv);
-    }
-
-    /**
-     * 已废弃mcrypt_encrypt
-     */
-    function deleted_encrypt($data, $secret)
-    {
-        $secretTemp = md5(hash("sha256", $secret, false));
-        $key        = substr($secretTemp, 0, 16);
-        $iv         = substr($secretTemp, 16);
-        //PKCS5PADDING
-        $blockSize = mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
-        $pad       = $blockSize - (strlen($data) % $blockSize);
-        $data      = $data . str_repeat(chr($pad), $pad);
-        $encrypted = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $key, $data, MCRYPT_MODE_CBC, $iv);
-
-        return base64_encode($encrypted);
-    }
-
-    /**
-     * 已废弃mcrypt_decrypt
-     */
-    function deleted_decrypt($encryptData, $secret)
-    {
-        $encryptDataTemp = base64_decode($encryptData);
-        $secretTemp      = md5(hash("sha256", $secret, false));
-        $key             = substr($secretTemp, 0, 16);
-        $iv              = substr($secretTemp, 16);
-        $decrypted       = mcrypt_decrypt(MCRYPT_RIJNDAEL_128, $key, $encryptDataTemp, MCRYPT_MODE_CBC, $iv);
-        //UNPKCS5PADDING
-        $pad = ord($decrypted{strlen($decrypted) - 1});
-        if ($pad > strlen($decrypted)) {
-            return $decrypted;
-        }
-        if (strspn($decrypted, chr($pad), strlen($decrypted) - $pad) != $pad) {
-            return $decrypted;
-        }
-        $decrypted = substr($decrypted, 0, -1 * $pad);
-
-        return $decrypted;
     }
 }
