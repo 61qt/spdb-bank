@@ -11,11 +11,6 @@ class Payment
     const GATEWAY      = 'https://api.spdb.com.cn/spdb/prd/api/acquiring/';
 
     private $config = [];
-    private $params = [];
-    private $secret;
-    private $clientId;
-    private $privateKey;
-    private $publicKey;
     private $debug;
 
     private $requireConfigs = [
@@ -37,22 +32,45 @@ class Payment
             }
         }
 
-        $this->params['subMechNoAcctID'] = $config['subMechNoAcctID'];
-        $this->params['spdbMrchNo']      = $config['spdbMrchNo'];
-        $this->params['mrchlInfmAdr']    = $config['mrchlInfmAdr'];
-        $this->params['terminalNo']      = $config['terminalNo'];
-
-        $this->secret     = $config['secret'];
-        $this->clientId   = $config['clientId'];
-        $this->privateKey = $config['privateKey'];
-        $this->publicKey  = $config['publicKey'];
-        $this->debug      = $debug;
+        $this->debug  = $debug;
+        $this->config = $config;
     }
 
     public function pay(array $data)
     {
         $path = 'appPay/initiation';
-        $data = array_merge($data, $this->params);
+        $data = array_merge($data, [
+            'subMechNoAcctID' => $this->config['subMechNoAcctID'],
+            'spdbMrchNo'      => $this->config['spdbMrchNo'],
+            'mrchlInfmAdr'    => $this->config['mrchlInfmAdr'],
+            'terminalNo'      => $this->config['terminalNo'],
+        ]);
+
+        return $this->post($data, $path);
+    }
+
+    /**
+     * @param $amountm, 退款金额
+     * @param $mrchOrdrNo, 商户订单号
+     * @param $mrchOrigOrdrNo, 原收单系统订单号
+     */
+    public function refund(string $amountm, string $mrchOrdrNo, string $mrchOrigOrdrNo)
+    {
+        // 手续费最低收费为1分钱
+        if ($amountm < 0.02) {
+            throw new Exception('退款金额不能少于1分钱');
+        }
+
+        $path = 'appPay/return';
+        $data = [
+            'subMechNoAcctID' => $this->config['subMechNoAcctID'],
+            'tranAmt'         => $amountm,
+            'mrchOrigOrdrNo'  => $mrchOrigOrdrNo,
+            'mrchOrdrNo'      => $mrchOrdrNo,
+            'mrchTm'          => date('YmdHis'),
+            'terminalNo'      => $this->config['terminalNo'],
+            'spdbMrchNo'      => $this->config['spdbMrchNo'],
+        ];
 
         return $this->post($data, $path);
     }
@@ -66,12 +84,13 @@ class Payment
 
         $Response = $Client->request('POST', self::GATEWAY . $path, [
             'headers' => [
-                'X-SPDB-Client-ID'  => $this->clientId,
-                'X-SPDB-SIGNATURE'  => $this->sign($this->privateKey, $json),
+                'X-SPDB-Client-ID'  => $this->config['clientId'],
+                'X-SPDB-SIGNATURE'  => $this->sign($json),
                 'X-SPDB-Encryption' => 'true',
                 'Content-Type'      => 'application/json'
             ],
-            'body'    => $this->encrypt($json, $this->secret),
+            'body'    => $this->encrypt($json),
+            'debug'   => $this->debug
         ]);
 
         $result = $Response->getBody()->getContents();
@@ -79,15 +98,15 @@ class Payment
             throw new Exception('请求失败');
         }
 
-        return json_decode($this->decrypt($result, $this->secret), true);
+        return json_decode($this->decrypt($result), true);
     }
 
     /**
      * sha1WithRSA加签
      */
-    public function sign($private_key, $data)
+    public function sign($data)
     {
-        $key = openssl_get_privatekey($private_key);
+        $key = openssl_get_privatekey($this->config['privateKey']);
         openssl_sign($data, $sign, $key, OPENSSL_ALGO_SHA1);
         $sign = base64_encode($sign);
 
@@ -97,10 +116,10 @@ class Payment
     /**
      * sha1WithRSA验签
      */
-    function verify($publicKey, $sign, $data)
+    public function verify($sign, $data)
     {
         $signTemp = base64_decode($sign);
-        $key      = openssl_pkey_get_public($publicKey);
+        $key      = openssl_pkey_get_public($this->config['publicKey']);
         $result   = openssl_verify($data, $signTemp, $key, OPENSSL_ALGO_SHA1);
 
         return $result === 1;
@@ -109,9 +128,9 @@ class Payment
     /**
      * AES加密
      */
-    function encrypt($msg, $secret, $iv = null)
+    public function encrypt($msg, $iv = null)
     {
-        $secretTemp       = md5(hash("sha256", $secret, false));
+        $secretTemp       = md5(hash("sha256", $this->config['secret'], false));
         $ivSize           = openssl_cipher_iv_length('AES-128-CBC');
         $key              = substr($secretTemp, 0, $ivSize);
         $iv               = substr($secretTemp, $ivSize);
@@ -123,14 +142,42 @@ class Payment
     /**
      * AES解密
      */
-    function decrypt($encryptData, $secret)
+    public function decrypt($encryptstr)
     {
-        $encryptDataTemp = base64_decode($encryptData);
-        $secretTemp      = md5(hash("sha256", $secret, false));
-        $ivSize          = openssl_cipher_iv_length('AES-128-CBC');
-        $key             = substr($secretTemp, 0, $ivSize);
-        $iv              = substr($secretTemp, $ivSize);
+        $data   = base64_decode($encryptstr);
+        $secret = md5(hash("sha256", $this->config['secret'], false));
+        $ivSize = openssl_cipher_iv_length('AES-128-CBC');
+        $key    = substr($secret, 0, $ivSize);
+        $iv     = substr($secret, $ivSize);
 
-        return openssl_decrypt($encryptDataTemp, "AES-128-CBC", $key, OPENSSL_RAW_DATA, $iv);
+        return openssl_decrypt($data, "AES-128-CBC", $key, OPENSSL_RAW_DATA, $iv);
+    }
+
+    /**
+     * 使用合作方私钥解密
+     */
+    public function rsaDecrypt($encryptstr)
+    {
+        $keyClosure = openssl_pkey_get_private($this->config['privateKey']);
+        $data       = base64_decode($encryptstr);
+        $data       = str_split($data, $this->getDecryptBlockLen($keyClosure));
+        $decrypt    = '';
+        foreach ($data as $chunk)
+        {
+            openssl_private_decrypt($chunk, $encrypted, $keyClosure);
+            $decrypt .= $encrypted;
+        }
+
+        return json_decode($decrypt, true);
+    }
+
+    protected function getDecryptBlockLen($keyClosure)
+    {
+        $keyInfo = openssl_pkey_get_details($keyClosure);
+        if (!$keyInfo) {
+            throw new Exception('获取密钥信息失败' . openssl_error_string());
+        }
+
+        return $keyInfo['bits'] / 8;
     }
 }
