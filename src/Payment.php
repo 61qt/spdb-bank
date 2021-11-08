@@ -4,11 +4,12 @@ namespace QT\SpdbBank;
 
 use Exception;
 use GuzzleHttp\Client;
+use GuzzleHttp\Promise;
 
 class Payment
 {
     const HTTP_TIMEOUT = 6.0;
-    const GATEWAY      = 'https://api.spdb.com.cn/spdb/prd/api/acquiring/';
+    const GATEWAY      = 'https://api.spdb.com.cn/spdb/prd/api/';
 
     private $config = [];
     private $debug;
@@ -38,7 +39,7 @@ class Payment
 
     public function pay(array $data)
     {
-        $path = 'appPay/initiation';
+        $path = 'acquiring/appPay/initiation';
         $data = array_merge($data, [
             'subMechNoAcctID' => $this->config['subMechNoAcctID'],
             'spdbMrchNo'      => $this->config['spdbMrchNo'],
@@ -47,6 +48,42 @@ class Payment
         ]);
 
         return $this->post($data, $path);
+    }
+
+    /**
+     * APP支付交易查证
+     */
+    public function getPayStatus(array $data)
+    {
+        $path     = 'electronic/appPayChk';
+        $client   = new Client(['base_uri' => self::GATEWAY]);
+        $promises = [];
+        foreach ($data as $k => $v) {
+            $json = json_encode([
+                    'subMechNoAcctID' => $this->config['subMechNoAcctID'],
+                    'mrchOrdrNo'      => $v['mrchOrdrNo'],
+                    'tranDate'        => $v['tranDate'],
+                    'spdbMrchNo'      => $this->config['spdbMrchNo'],
+            ]);
+
+            $promises[$k] = $client->postAsync($path, [
+                'headers' => [
+                    'X-SPDB-Client-ID'  => $this->config['clientId'],
+                    'X-SPDB-SIGNATURE'  => $this->sign($json),
+                    'X-SPDB-Encryption' => 'true',
+                    'Content-Type'      => 'application/json'
+                ],
+                'body'    => $this->encrypt($json),
+            ]);
+        }
+
+        $responses = Promise\Utils::unwrap($promises);
+        $result    = [];
+        foreach ($data as $k => $v) {
+            $result[$k] = json_decode($this->decrypt($responses[$k]->getBody()->getContents()), true);
+        }
+
+        return $result;
     }
 
     /**
@@ -61,7 +98,7 @@ class Payment
             throw new Exception('退款金额不能少于1分钱');
         }
 
-        $path = 'appPay/return';
+        $path = 'acquiring/appPay/return';
         $data = [
             'subMechNoAcctID' => $this->config['subMechNoAcctID'],
             'tranAmt'         => $amountm,
