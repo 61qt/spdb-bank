@@ -52,18 +52,22 @@ class Payment
 
     /**
      * APP支付交易查证
+     * @param array  $data
+     * @param $orderField $key 浦发交易流水号和商户订单号二者必选其一
+     * @return array
+     * @throws \Throwable
      */
-    public function getPayStatus(array $data)
+    public function getPayStatus(array $data, $orderField = 'mrchOrdrNo')
     {
         $path     = 'electronic/appPayChk';
         $client   = new Client(['base_uri' => self::GATEWAY]);
         $promises = [];
         foreach ($data as $k => $v) {
             $json = json_encode([
-                    'subMechNoAcctID' => $this->config['subMechNoAcctID'],
-                    'mrchOrdrNo'      => $v['mrchOrdrNo'],
-                    'tranDate'        => $v['tranDate'],
-                    'spdbMrchNo'      => $this->config['spdbMrchNo'],
+                'subMechNoAcctID' => $this->config['subMechNoAcctID'],
+                $orderField       => $v[$orderField] ?? '',
+                'tranDate'        => $v['tranDate'],
+                'spdbMrchNo'      => $this->config['spdbMrchNo'],
             ]);
 
             $promises[$k] = $client->postAsync($path, [
