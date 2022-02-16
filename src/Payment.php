@@ -17,7 +17,6 @@ class Payment
     private $requireConfigs = [
         'subMechNoAcctID' => '子商户公众账号ID不能为空',
         'spdbMrchNo'      => '特约商户号不能为空',
-        'terminalNo'      => '终端号',
         'secret'          => '秘钥不能为空',
         'mrchlInfmAdr'    => 'notify_url不能为空',
         'privateKey'      => '私钥不能为空',
