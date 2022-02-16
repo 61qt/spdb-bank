@@ -108,7 +108,7 @@ class Payment
             'mrchOrigOrdrNo'  => $mrchOrigOrdrNo,
             'mrchOrdrNo'      => $mrchOrdrNo,
             'mrchTm'          => date('YmdHis'),
-            'terminalNo'      => $this->config['terminalNo'],
+            'terminalNo'      => $this->config['terminalNo'] ?? '',
             'spdbMrchNo'      => $this->config['spdbMrchNo'],
         ];
 
